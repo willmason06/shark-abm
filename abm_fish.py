@@ -3,27 +3,19 @@ import numpy as np
 import mesa
 import matplotlib.pyplot as plt
 
-# fish
-
+# FISH
 # swim toward Centre 
 # swim away from shark
 # variable speeds depending on distance from shark
+# what separation_dist and max_turn???
 
-# separation: steer to avoid crowding local flockmates
-# alignment: steer towards the average heading of local flockmates
-# cohesion: steer to move towards the average position (center of mass) of local flockmates
-
-# shark 
+# SHARK 
 # swim towards closest Fish
 # swim towards centre
 
 # custom pngs for fish and shark
 # fix the x and y to use mesa
 # add a direction
-
-# get the vecvtor it wants to go in
-
-# make np arrays
 
 
 class Fish(mesa.Agent):
@@ -58,13 +50,14 @@ class Fish(mesa.Agent):
         if len(self.nearby_fish) == 0:
             return np.array([0.0, 0.0])
         
-        separation_dist=1
+        
+
         total_vector = np.array([0.0, 0.0])
         for fish in self.nearby_fish:
             dist, vector = self.dist_between(fish.pos)
-            if dist <= separation_dist and dist > 0:
+            if dist <= self.model.separation_dist and dist > 0:
                 direction_away = -self.normalise_vector(vector)
-                total_vector += direction_away * (separation_dist - dist)
+                total_vector += direction_away * (self.model.separation_dist - dist)
 
         return self.normalise_vector(total_vector)
 
@@ -80,7 +73,6 @@ class Fish(mesa.Agent):
         average_heading = total_heading / len(self.nearby_fish)
 
         return self.normalise_vector(average_heading)
-
 
 
     def cohesion(self):
@@ -101,24 +93,24 @@ class Fish(mesa.Agent):
 
     def move(self):
 
-        separation_vector = self.separation()
-        alignment_vector = self.alignment()
-        cohesion_vector = self.cohesion()
+        separation_vector = self.separation() # separation: steer to avoid crowding local flockmates
+        alignment_vector = self.alignment() # alignment: steer towards the average heading of local flockmates
+        cohesion_vector = self.cohesion() # cohesion: steer to move towards the average position (center of mass) of local flockmates
     
-        vector = 3*separation_vector + 2*alignment_vector + 1*cohesion_vector
-        normalised_vector = self.normalise_vector(vector)
+        combined_vector = 3*separation_vector + 2*alignment_vector + 1*cohesion_vector
+        combined_vector_normalised = self.normalise_vector(combined_vector)
 
+        heading_angle_current = np.arctan2(self.heading[1], self.heading[0])
+        heading_angle_target = np.arctan2(combined_vector_normalised[1], combined_vector_normalised[0])
 
+        heading_angle_diff = (heading_angle_target - heading_angle_current + np.pi) % (2 * np.pi) - np.pi
+        heading_angle_diff = np.clip(heading_angle_diff, -self.model.max_turn, self.model.max_turn)
 
-        heading_angle = np.arctan2(normalised_vector[1], normalised_vector[0])
-
-        self.heading = normalised_vector
-
+        heading_angle_new = heading_angle_current + heading_angle_diff
         
-        new_position = self.pos + normalised_vector * self.speed
-
+        self.heading = np.array([np.cos(heading_angle_new), np.sin(heading_angle_new)])
+        new_position = self.pos + self.heading * self.speed
         return new_position
-
 
 
     def step(self):
@@ -138,16 +130,6 @@ class Fish(mesa.Agent):
         )
 
 
-
-
-
-
-
-
-
-
-
-
 '''
 class Shark:
     def __init__(self):
@@ -156,10 +138,6 @@ class Shark:
     def step(self):
 
 '''
-
-
-
-
 
 class Model(mesa.Model):
     def __init__(
@@ -170,6 +148,8 @@ class Model(mesa.Model):
         height=100,
         fish_speed=1,
         shark_speed=1,
+        separation_dist=1,
+        max_turn=np.pi / 12
     ):
         super().__init__()
         self.population = population
@@ -178,6 +158,8 @@ class Model(mesa.Model):
         self.height = height
         self.fish_speed = fish_speed
         self.shark_speed = shark_speed
+        self.separation_dist = separation_dist
+        self.max_turn = max_turn
 
         self.grid = mesa.space.ContinuousSpace(
             x_max=width,
@@ -195,7 +177,6 @@ class Model(mesa.Model):
                 self, 
                 heading,
                 fish_speed
-
             )
 
             self.grid.place_agent(
@@ -217,35 +198,34 @@ class Model(mesa.Model):
     def step(self):
         self.agents.shuffle_do("step")
         self.fish_positions_history.append(self.get_fish_positions())
-
-
-
-
-
-
-
-
+        self.fish_directions_history.append([fish.heading for fish in self.agents])
 
 
 
 model = Model(        
     population=100,
+    neighbourhood_radius=10,
     width=100,
     height=100,
     fish_speed=1,
     shark_speed=1,
+    separation_dist=1,
+    max_turn=np.pi / 12
 )
-
 for i in range(100):
     model.step()
 
 fish_positions_history = model.fish_positions_history
+fish_directions_history = model.fish_directions_history
 
 for i, fish_positions in enumerate(fish_positions_history):
     plt.clf()
     x = [pos[0] for pos in fish_positions]
     y = [pos[1] for pos in fish_positions]
-    plt.scatter(x, y)
+    dx = [heading[0] for heading in fish_directions_history[i]]
+    dy = [heading[1] for heading in fish_directions_history[i]]
+
+    plt.quiver(x,y,dx,dy)
     plt.xlim(0, model.width)
     plt.ylim(0, model.height)
     plt.title(f"Step {i}")
