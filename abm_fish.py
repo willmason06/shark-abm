@@ -8,32 +8,25 @@ import matplotlib.pyplot as plt
 # swim in same direction as others
 # swim toward Centre 
 # swim away from shark
+# variable speeds depending on distance from shark
 
 
 # shark 
 # swim towards closest Fish
 # swim towards centre
 
-# model 
-# set number of fish and sharks
-# set start postion
-# set speeds
-# set grid size
-
+# custom pngs for fish and shark
+# fix the x and y to use mesa
+# add a direction
 
 
 class Fish(mesa.Agent):
     def __init__(
         self,
         model,
-        x,
-        y,
         speed
     ):
         super().__init__(model)
-        # self.model = model
-        self.x = x
-        self.y = y
         self.speed = speed
 
     def swim_towards_other_fish(self, fish_positions):
@@ -41,12 +34,12 @@ class Fish(mesa.Agent):
         fish_distances = []
         for fish_position in fish_positions:
             x, y = fish_position
-            if x == self.x and y == self.y:
+            if x == self.pos[0] and y == self.pos[1]:
                 continue
 
-            dist = np.sqrt((x - self.x)**2 + (y - self.y)**2)
-            xv = (x - self.x) / dist
-            yv = (y - self.y) / dist
+            dist = np.sqrt((x - self.pos[0])**2 + (y - self.pos[1])**2)
+            xv = (x - self.pos[0]) / dist
+            yv = (y - self.pos[1]) / dist
             
             fish_displacements.append((xv, yv))
             fish_distances.append(dist)
@@ -54,8 +47,8 @@ class Fish(mesa.Agent):
         closest_fish_idx = np.argmin(fish_distances)
         closest_fish_rel_vec = fish_displacements[closest_fish_idx]
 
-        new_x = self.x + self.speed * closest_fish_rel_vec[0]
-        new_y = self.y + self.speed * closest_fish_rel_vec[1]
+        new_x = self.pos[0] + self.speed * closest_fish_rel_vec[0]
+        new_y = self.pos[1] + self.speed * closest_fish_rel_vec[1]
 
         return new_x, new_y
 
@@ -68,8 +61,8 @@ class Fish(mesa.Agent):
         new_x = max(0, min(self.model.width - 1, new_x))
         new_y = max(0, min(self.model.height - 1, new_y))
 
-        self.x = new_x
-        self.y = new_y
+        self.pos[0] = new_x
+        self.pos[1] = new_y
 
         self.model.grid.move_agent(
             self,
@@ -114,7 +107,10 @@ class Model(mesa.Model):
             x = self.random.randrange(width)
             y = self.random.randrange(height)
 
-            fish = Fish(self, x, y, fish_speed)
+            fish = Fish(
+                self, 
+                fish_speed
+            )
 
             self.grid.place_agent(
                 fish,
@@ -140,15 +136,19 @@ class Model(mesa.Model):
 
 
 
-model = Model()
+model = Model(        
+    population=100,
+    width=100,
+    height=100,
+    fish_speed=1,
+    shark_speed=1,
+)
 
 for i in range(100):
     model.step()
 
 fish_positions_history = model.fish_positions_history
 
-
-# make animation for plotting graph
 for i, fish_positions in enumerate(fish_positions_history):
     plt.clf()
     x = [pos[0] for pos in fish_positions]
