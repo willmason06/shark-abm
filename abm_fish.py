@@ -3,19 +3,15 @@ import numpy as np
 import mesa
 import matplotlib.pyplot as plt
 
-# FISH
+# FIH
 # swim toward Centre 
 # swim away from shark
 # variable speeds depending on distance from shark
-# what separation_dist and max_turn???
 
-# SHARK 
-# swim towards closest Fish
-# swim towards centre
+# fish  get eaten
+# function for clipping of angles
 
-# custom pngs for fish and shark
-# fix the x and y to use mesa
-# add a direction
+
 
 
 class Fish(mesa.Agent):
@@ -30,36 +26,21 @@ class Fish(mesa.Agent):
         self.heading = np.array(heading, dtype=float)
 
 
-    def normalise_vector(self, vector):
-        vector = np.array(vector, dtype=float)
-        magnitude = np.linalg.norm(vector)
-        if magnitude == 0:
-            return np.array([0.0, 0.0])
-        return vector / magnitude
 
-
-    def dist_between(self, pos):
-        pos = np.array(pos, dtype=float)
-        self_pos = np.array(self.pos, dtype=float)
-        vector = pos - self_pos
-        distance = np.linalg.norm(vector)
-        return distance, vector
 
 
     def separation(self):
         if len(self.nearby_fish) == 0:
             return np.array([0.0, 0.0])
         
-        
-
         total_vector = np.array([0.0, 0.0])
         for fish in self.nearby_fish:
-            dist, vector = self.dist_between(fish.pos)
+            dist, vector = self.model.dist_between(self.pos, fish.pos)
             if dist <= self.model.separation_dist and dist > 0:
-                direction_away = -self.normalise_vector(vector)
+                direction_away = -self.model.normalise_vector(vector)
                 total_vector += direction_away * (self.model.separation_dist - dist)
 
-        return self.normalise_vector(total_vector)
+        return self.model.normalise_vector(total_vector)
 
 
     def alignment(self):
@@ -72,7 +53,7 @@ class Fish(mesa.Agent):
             total_heading += fish.heading
         average_heading = total_heading / len(self.nearby_fish)
 
-        return self.normalise_vector(average_heading)
+        return self.model.normalise_vector(average_heading)
 
 
     def cohesion(self):
@@ -86,9 +67,9 @@ class Fish(mesa.Agent):
         average_position = (
                     total_position / len(self.nearby_fish)
         )
-        vector_to_centre = self.dist_between(average_position)[1]
+        vector_to_centre = self.model.dist_between(self.pos, average_position)[1]
 
-        return self.normalise_vector(vector_to_centre)
+        return self.model.normalise_vector(vector_to_centre)
 
 
     def move(self):
@@ -98,27 +79,22 @@ class Fish(mesa.Agent):
         cohesion_vector = self.cohesion() # cohesion: steer to move towards the average position (center of mass) of local flockmates
     
         combined_vector = 3*separation_vector + 2*alignment_vector + 1*cohesion_vector
-        combined_vector_normalised = self.normalise_vector(combined_vector)
 
-        heading_angle_current = np.arctan2(self.heading[1], self.heading[0])
-        heading_angle_target = np.arctan2(combined_vector_normalised[1], combined_vector_normalised[0])
-
-        heading_angle_diff = (heading_angle_target - heading_angle_current + np.pi) % (2 * np.pi) - np.pi
-        heading_angle_diff = np.clip(heading_angle_diff, -self.model.max_turn, self.model.max_turn)
-
-        heading_angle_new = heading_angle_current + heading_angle_diff
-        
-        self.heading = np.array([np.cos(heading_angle_new), np.sin(heading_angle_new)])
+        self.heading = self.heading = self.model.clip_vector(self.heading, combined_vector)
         new_position = self.pos + self.heading * self.speed
         return new_position
 
 
     def step(self):
-        self.nearby_fish = self.model.grid.get_neighbors(
+        nearby_agents = self.model.grid.get_neighbors(
             self.pos,
             radius=self.model.neighbourhood_radius,
             include_center=False
         )
+        self.nearby_fish = [
+            agent for agent in nearby_agents
+            if isinstance(agent, Fish)
+        ]
         new_x, new_y = self.move()
         
         # new_x = max(0, min(self.model.width - 1, new_x))
@@ -130,19 +106,73 @@ class Fish(mesa.Agent):
         )
 
 
-'''
-class Shark:
-    def __init__(self):
+
+class Shark(mesa.Agent):
+    def __init__(
+        self,
+        model,
+        heading,
+        speed
+    ):
+        super().__init__(model)
+        self.speed = speed
+        self.heading = np.array(heading, dtype=float)
+
+    def find_closest_fish(self):
+        fish_dists = []
+        fish_vecs = []
+
+        for fish in self.nearby_fish:
+            dist, vec = self.model.dist_between(self.pos, fish.pos)
+            fish_dists.append(dist)
+            fish_vecs.append(vec)
+
+        closest_fish_idx = np.argmin(fish_dists)
+        return fish_vecs[closest_fish_idx]
+
+    def move_towards_centre(self):
+        centre_position = np.array([self.model.width / 2, self.model.height / 2])
+        vector_to_centre = self.model.dist_between(self.pos, centre_position)[1]
+
+        self.heading = self.heading = self.model.clip_vector(self.heading, vector_to_centre)
+        new_position = self.pos + self.heading * self.speed
+        return new_position
+
+    def move_towards_closest_fish(self):
+        closest_fish_vec = self.find_closest_fish()
+        self.heading = self.model.clip_vector(self.heading, closest_fish_vec)
+        new_position = self.pos + self.heading * self.speed
+        return new_position
 
 
     def step(self):
+        nearby_agents = self.model.grid.get_neighbors(
+            self.pos,
+            radius=self.model.neighbourhood_radius,
+            include_center=False
+        )
+        self.nearby_fish = [
+            agent for agent in nearby_agents
+            if isinstance(agent, Fish)
+        ]
 
-'''
+        if self.nearby_fish:
+            new_x, new_y = self.move_towards_closest_fish()
+        else:
+            new_x, new_y = self.move_towards_centre()
+
+        self.model.grid.move_agent(
+            self,
+            (new_x, new_y)
+        )
+
+
 
 class Model(mesa.Model):
     def __init__(
         self,
-        population=100,
+        fish_population=100,
+        shark_population=1,
         neighbourhood_radius=10,
         width=100,
         height=100,
@@ -151,8 +181,9 @@ class Model(mesa.Model):
         separation_dist=1,
         max_turn=np.pi / 12
     ):
+        
         super().__init__()
-        self.population = population
+        self.fish_population = fish_population
         self.neighbourhood_radius = neighbourhood_radius
         self.width = width
         self.height = height
@@ -167,7 +198,7 @@ class Model(mesa.Model):
             torus=True, # wraps or not
         )
 
-        for i in range(population):
+        for i in range(fish_population):
             x = self.random.randrange(width)
             y = self.random.randrange(height)
             heading_angle = self.random.uniform(0, 2 * np.pi)
@@ -184,33 +215,95 @@ class Model(mesa.Model):
                 (x, y),
             )
 
+        for i in range(shark_population):
+            x = self.random.randrange(width)
+            y = self.random.randrange(height)
+            heading_angle = self.random.uniform(0, 2 * np.pi)
+            heading = (np.cos(heading_angle), np.sin(heading_angle))
+
+            shark = Shark(
+                self, 
+                heading,
+                shark_speed
+            )
+
+            self.grid.place_agent(
+                shark,
+                (x, y),
+            )
+
         self.fish_positions_history = []
         self.fish_directions_history = []
+
+        self.shark_positions_history = []
+        self.shark_directions_history = []
+
+
+    def normalise_vector(self, vector):
+        vector = np.array(vector, dtype=float)
+        magnitude = np.linalg.norm(vector)
+        if magnitude == 0:
+            return np.array([0.0, 0.0])
+        return vector / magnitude
+
+
+    def dist_between(self, pos1, pos2):
+        pos1 = np.array(pos1, dtype=float)
+        pos2 = np.array(pos2, dtype=float)
+        vector = pos2 - pos1
+        distance = np.linalg.norm(vector)
+        return distance, vector
+
+
+    def clip_vector(self, current_vector, target_vector):
+        heading_angle_current = np.arctan2(current_vector[1], current_vector[0])
+        heading_angle_target = np.arctan2(target_vector[1], target_vector[0])
+
+        heading_angle_diff = (heading_angle_target - heading_angle_current + np.pi) % (2 * np.pi) - np.pi
+        heading_angle_diff = np.clip(heading_angle_diff, -self.max_turn, self.max_turn)
+
+        heading_angle_new = heading_angle_current + heading_angle_diff
         
+        return np.array([np.cos(heading_angle_new), np.sin(heading_angle_new)])
+
 
     def get_fish_positions(self):
         fish_positions = []
-        for fish in self.agents:
-            fish_positions.append((fish.pos[0], fish.pos[1]))
+        for agent in self.agents:
+            if isinstance(agent, Fish):
+                fish_positions.append((agent.pos[0], agent.pos[1]))
         return fish_positions
+
+
+    def get_shark_positions(self):
+        shark_positions = []
+        for agent in self.agents:
+            if isinstance(agent, Shark):
+                shark_positions.append((agent.pos[0], agent.pos[1]))
+        return shark_positions
 
 
     def step(self):
         self.agents.shuffle_do("step")
+
         self.fish_positions_history.append(self.get_fish_positions())
-        self.fish_directions_history.append([fish.heading for fish in self.agents])
+        self.fish_directions_history.append([agent.heading for agent in self.agents if isinstance(agent, Fish)])
+
+        self.shark_positions_history.append(self.get_shark_positions())
+        self.shark_directions_history.append([agent.heading for agent in self.agents if isinstance(agent, Shark)])
 
 
 
 model = Model(        
-    population=100,
+    fish_population=100,
+    shark_population=2,
     neighbourhood_radius=10,
     width=100,
     height=100,
     fish_speed=1,
     shark_speed=1,
     separation_dist=1,
-    max_turn=np.pi / 12
+    max_turn=np.pi/12
 )
 for i in range(100):
     model.step()
@@ -218,14 +311,24 @@ for i in range(100):
 fish_positions_history = model.fish_positions_history
 fish_directions_history = model.fish_directions_history
 
+shark_positions_history = model.shark_positions_history
+shark_directions_history = model.shark_directions_history
+
 for i, fish_positions in enumerate(fish_positions_history):
     plt.clf()
-    x = [pos[0] for pos in fish_positions]
-    y = [pos[1] for pos in fish_positions]
-    dx = [heading[0] for heading in fish_directions_history[i]]
-    dy = [heading[1] for heading in fish_directions_history[i]]
 
-    plt.quiver(x,y,dx,dy)
+    fish_x = [pos[0] for pos in fish_positions]
+    fish_y = [pos[1] for pos in fish_positions]
+    fish_dx = [heading[0] for heading in fish_directions_history[i]]
+    fish_dy = [heading[1] for heading in fish_directions_history[i]]
+
+    shark_x = [pos[0] for pos in shark_positions_history[i]]
+    shark_y = [pos[1] for pos in shark_positions_history[i]]
+    shark_dx = [heading[0] for heading in shark_directions_history[i]]
+    shark_dy = [heading[1] for heading in shark_directions_history[i]]
+
+    plt.quiver(fish_x, fish_y, fish_dx, fish_dy, color='blue', scale=20)
+    plt.quiver(shark_x, shark_y, shark_dx, shark_dy, color='red', scale=20)
     plt.xlim(0, model.width)
     plt.ylim(0, model.height)
     plt.title(f"Step {i}")
