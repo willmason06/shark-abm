@@ -5,14 +5,10 @@ import matplotlib.pyplot as plt
 
 # FIH
 # swim toward Centre 
-# swim away from shark
 # variable speeds depending on distance from shark
+# improve seperation and grouping whatnot
 
-# when shark near centre swim randomly 
-
-
-
-
+# set torus to false 
 
 class Fish(mesa.Agent):
     def __init__(
@@ -354,3 +350,4 @@ for i, fish_positions in enumerate(fish_positions_history):
     plt.ylim(0, model.height)
     plt.title(f"Step {i}")
     plt.pause(0.03)
+
