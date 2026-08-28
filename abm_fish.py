@@ -133,17 +133,13 @@ class Shark(mesa.Agent):
         self.speed = speed
         self.heading = np.array(heading, dtype=float)
 
-    def find_closest_fish(self):
-        fish_dists = []
-        fish_vecs = []
+    def find_closest_fish_group(self):
+        total_vec = np.array([0.0,0.0])
 
         for fish in self.nearby_fish:
             dist, vec = self.model.dist_between(self.pos, fish.pos)
-            fish_dists.append(dist)
-            fish_vecs.append(vec)
-
-        closest_fish_idx = np.argmin(fish_dists)
-        return fish_vecs[closest_fish_idx]
+            total_vec += vec
+        return self.model.normalise_vector(total_vec)
 
     def move_towards_centre(self):
         centre_position = np.array([self.model.width / 2, self.model.height / 2])
@@ -154,7 +150,7 @@ class Shark(mesa.Agent):
         
 
     def move_towards_closest_fish(self):
-        closest_fish_vec = self.find_closest_fish()
+        closest_fish_vec = self.find_closest_fish_group()
         self.heading = self.model.clip_vector(self.heading, closest_fish_vec, self.model.shark_max_turn)
         self.new_pos = self.pos + self.heading * self.speed
         
@@ -206,7 +202,7 @@ class Model(mesa.Model):
         width=100,
         height=100,
         fish_speed=1,
-        shark_speed=1.1,
+        shark_speed=1.5,
         separation_dist=1,
         fish_max_turn=np.pi/12,
         shark_max_turn=np.pi/6,
@@ -215,6 +211,7 @@ class Model(mesa.Model):
         
         super().__init__()
         self.fish_population = fish_population
+        self.shark_population = shark_population
         self.fish_neighbourhood_radius = fish_neighbourhood_radius
         self.shark_neighbourhood_radius = shark_neighbourhood_radius
         self.width = width
@@ -232,7 +229,7 @@ class Model(mesa.Model):
             torus=True, # wraps or not
         )
 
-        for i in range(fish_population):
+        for i in range(self.fish_population):
             x = self.random.randrange(width)
             y = self.random.randrange(height)
             heading_angle = self.random.uniform(0, 2 * np.pi)
@@ -249,7 +246,7 @@ class Model(mesa.Model):
                 (x, y),
             )
 
-        for i in range(shark_population):
+        for i in range(self.shark_population):
             x = self.random.randrange(width)
             y = self.random.randrange(height)
             heading_angle = self.random.uniform(0, 2 * np.pi)
@@ -329,7 +326,7 @@ class Model(mesa.Model):
 
 
 model = Model()
-for i in range(100):
+for i in range(500):
     model.step()
 
 fish_positions_history = model.fish_positions_history
