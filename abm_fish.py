@@ -79,7 +79,7 @@ class Fish(mesa.Agent):
     def boundary_force(self):
 
         force = np.array([0.0, 0.0])
-        boundary_distance = 5
+        boundary_distance = self.model.fish_neighbourhood_radius
 
         x, y = self.pos
 
@@ -116,7 +116,7 @@ class Fish(mesa.Agent):
         alignment_force = self.alignment() * self.model.alignment_weight 
         cohesion_force = self.cohesion() * self.model.cohesion_weight
 
-        boundary_force = self.boundary_force()
+        boundary_force = self.boundary_force() * self.model.boundary_weight
     
         self.acceleration = separation_force + alignment_force + cohesion_force + boundary_force
         self.velocity += self.acceleration
@@ -247,12 +247,13 @@ class Model(mesa.Model):
         separation_weight=2,
         alignment_weight=1,
         cohesion_weight=0.3,
+        boundary_weight=2,
         separation_dist=1,
         
         fish_population=100,
         fish_neighbourhood_radius=10,
-        fish_max_speed=1,
-        fish_max_force=0.5,
+        fish_max_speed=2,
+        fish_max_force=0.4,
 
         shark_population=0,
         shark_neighbourhood_radius=20,
@@ -269,6 +270,7 @@ class Model(mesa.Model):
         self.separation_weight = separation_weight
         self.alignment_weight = alignment_weight
         self.cohesion_weight = cohesion_weight
+        self.boundary_weight = boundary_weight
         self.separation_dist = separation_dist
 
         self.fish_population = fish_population
@@ -330,35 +332,35 @@ class Model(mesa.Model):
         return vector
 
 
-    def get_fish_positions(self):
-        fish_positions = []
-        for agent in self.agents:
-            if isinstance(agent, Fish):
-                fish_positions.append((agent.pos[0], agent.pos[1]))
-        return fish_positions
-
-
-    def get_shark_positions(self):
-        shark_positions = []
-        for agent in self.agents:
-            if isinstance(agent, Shark):
-                shark_positions.append((agent.pos[0], agent.pos[1]))
-        return shark_positions
-
-
     def step(self):
         self.agents.shuffle_do("step")
 
-        self.fish_positions_history.append(self.get_fish_positions())
-        self.fish_velocity_history.append([agent.velocity for agent in self.agents if isinstance(agent, Fish)])
+        fish_positions = []
+        fish_velocities = []
+        shark_positions = []
+        shark_velocities = []
 
-        self.shark_positions_history.append(self.get_shark_positions())
-        self.shark_velocity_history.append([agent.velocity for agent in self.agents if isinstance(agent, Shark)])
+        for agent in self.agents:
+
+            if isinstance(agent, Fish):
+                fish_positions.append(tuple(agent.pos))
+                fish_velocities.append(agent.velocity.copy())
+
+            elif isinstance(agent, Shark):
+                shark_positions.append(tuple(agent.pos))
+                shark_velocities.append(agent.velocity.copy())
+
+        self.fish_positions_history.append(fish_positions)
+        self.fish_velocity_history.append(fish_velocities)
+        self.shark_positions_history.append(shark_positions)
+        self.shark_velocity_history.append(shark_velocities)
+
+
 
 
 
 model = Model()
-for i in range(500):
+for i in range(100):
     model.step()
 
 fish_positions_history = model.fish_positions_history
@@ -366,6 +368,11 @@ fish_velocity_history = model.fish_velocity_history
 
 shark_positions_history = model.shark_positions_history
 shark_velocity_history = model.shark_velocity_history
+
+
+
+
+
 
 for i, fish_positions in enumerate(fish_positions_history):
     plt.clf()
@@ -392,9 +399,9 @@ for i, fish_positions in enumerate(fish_positions_history):
         fish_dx, 
         fish_dy, 
         color='blue', 
-        scale=10,
-        angles="xy", 
-        scale_units="xy"
+        angles="xy",
+        scale_units="xy",
+        scale=0.3
     )
     
     plt.quiver(
