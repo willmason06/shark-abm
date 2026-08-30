@@ -11,3 +11,14 @@ def clip_vector(self, current_vector, target_vector, max_turn):
     heading_angle_new = heading_angle_current + heading_angle_diff
     
     return np.array([np.cos(heading_angle_new), np.sin(heading_angle_new)])
+
+
+def move_towards_fish(self):
+    total_vec = np.array([0.0,0.0])
+
+    for fish in self.nearby_fish:
+        vec = np.array(fish.pos) - np.array(self.pos)
+        total_vec += vec
+    closest_fish_vec = total_vec / np.linalg.norm(total_vec)
+
+    self.force += self.get_force(closest_fish_vec)
