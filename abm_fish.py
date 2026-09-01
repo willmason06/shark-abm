@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 # readd limited turns
 # slow down when well aligned
 
+# combine mouse and centre position code (same thing diff pos)
 
 '''
 Found a real bug — and it's actually pre-existing in your original script,
@@ -217,6 +218,14 @@ class Shark(mesa.Agent):
         self.force += self.model.get_force(self,closest_fish_vec)
 
 
+    def move_towards_mouse(self, mouse_x, mouse_y):
+        mouse_position = np.array([mouse_x, mouse_y])
+        vector_to_centre = mouse_position - self.pos
+
+        self.force += self.model.get_force(self,vector_to_centre)
+
+
+
 
     def eat_fish(self):
         nearby_agents = self.model.grid.get_neighbors(
@@ -245,11 +254,13 @@ class Shark(mesa.Agent):
             if isinstance(agent, Fish)
         ]
 
-        if self.nearby_fish:
-            self.move_towards_fish()
+        if not self.model.shark_mouse_input: 
 
-        else:
-            self.move_towards_centre()
+            if self.nearby_fish:
+                self.move_towards_fish()
+
+            else:
+                self.move_towards_centre()
 
         self.force += self.model.boundary_force(self) * self.model.boundary_weight
 
@@ -270,11 +281,13 @@ class Shark(mesa.Agent):
 class Model(mesa.Model):
     def __init__(
         self,
+
+        shark_mouse_input=False,
         
         width=100,
         height=100,
 
-        separation_weight=2,
+        separation_weight=3,
         alignment_weight=1,
         cohesion_weight=0.3,
         boundary_weight=2,
@@ -294,6 +307,8 @@ class Model(mesa.Model):
     ):
     
         super().__init__()
+
+        self.shark_mouse_input = shark_mouse_input
 
         self.width = width
         self.height = height
@@ -450,69 +465,71 @@ class Model(mesa.Model):
         self.shark_velocity_history.append(shark_velocities)
 
 
-model = Model()
-for i in range(300):
-    model.step()
+if __name__ == "__main__":
 
-fish_positions_history = model.fish_positions_history
-fish_velocity_history = model.fish_velocity_history
+    model = Model()
+    for i in range(300):
+        model.step()
 
-shark_positions_history = model.shark_positions_history
-shark_velocity_history = model.shark_velocity_history
+    fish_positions_history = model.fish_positions_history
+    fish_velocity_history = model.fish_velocity_history
 
-
-for i, fish_positions in enumerate(fish_positions_history):
-    plt.clf()
-
-    fish_x = [pos[0] for pos in fish_positions]
-    fish_y = [pos[1] for pos in fish_positions]
-    fish_dx = [heading[0] for heading in fish_velocity_history[i]]
-    fish_dy = [heading[1] for heading in fish_velocity_history[i]]
-
-    shark_x = [pos[0] for pos in shark_positions_history[i]]
-    shark_y = [pos[1] for pos in shark_positions_history[i]]
-    shark_dx = [heading[0] for heading in shark_velocity_history[i]]
-    shark_dy = [heading[1] for heading in shark_velocity_history[i]]
+    shark_positions_history = model.shark_positions_history
+    shark_velocity_history = model.shark_velocity_history
 
 
-    plt.scatter(
-        fish_x,
-        fish_y,
-        color='blue', 
-        s=30
-    )
+    for i, fish_positions in enumerate(fish_positions_history):
+        plt.clf()
 
-    plt.scatter(
-        shark_x,
-        shark_y,
-        color='red', 
-        s=30,
-    )
+        fish_x = [pos[0] for pos in fish_positions]
+        fish_y = [pos[1] for pos in fish_positions]
+        fish_dx = [heading[0] for heading in fish_velocity_history[i]]
+        fish_dy = [heading[1] for heading in fish_velocity_history[i]]
 
-    plt.quiver(
-        fish_x, 
-        fish_y, 
-        fish_dx, 
-        fish_dy, 
-        color='blue', 
-        angles="xy",
-        scale_units="xy",
-        scale=0.3
-    )
-    
-    plt.quiver(
-        shark_x, 
-        shark_y, 
-        shark_dx, 
-        shark_dy, 
-        color='red', 
-        angles="xy",
-        scale_units="xy",
-        scale=0.3
-    )
+        shark_x = [pos[0] for pos in shark_positions_history[i]]
+        shark_y = [pos[1] for pos in shark_positions_history[i]]
+        shark_dx = [heading[0] for heading in shark_velocity_history[i]]
+        shark_dy = [heading[1] for heading in shark_velocity_history[i]]
 
-    plt.xlim(0, model.width)
-    plt.ylim(0, model.height)
-    plt.title(f"Step {i}")
-    plt.pause(0.03)
+
+        plt.scatter(
+            fish_x,
+            fish_y,
+            color='blue', 
+            s=30
+        )
+
+        plt.scatter(
+            shark_x,
+            shark_y,
+            color='red', 
+            s=30,
+        )
+
+        plt.quiver(
+            fish_x, 
+            fish_y, 
+            fish_dx, 
+            fish_dy, 
+            color='blue', 
+            angles="xy",
+            scale_units="xy",
+            scale=0.3
+        )
+        
+        plt.quiver(
+            shark_x, 
+            shark_y, 
+            shark_dx, 
+            shark_dy, 
+            color='red', 
+            angles="xy",
+            scale_units="xy",
+            scale=0.3
+        )
+
+        plt.xlim(0, model.width)
+        plt.ylim(0, model.height)
+        plt.title(f"Step {i}")
+        plt.pause(0.03)
 

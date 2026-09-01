@@ -350,7 +350,7 @@ class Model(mesa.Model):
         width=100,
         height=100,
 
-        separation_weight=2,
+        separation_weight=3,
         alignment_weight=1,
         cohesion_weight=0.3,
         boundary_weight=2,

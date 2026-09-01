@@ -1,4 +1,4 @@
-const canvas = document.getElementById("simulation");
+const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 
@@ -18,48 +18,90 @@ window.addEventListener("resize", () => {
 });
 
 
-// ==========================================
-// IMAGES
-// ==========================================
-
 const fishImage = new Image();
 fishImage.src = "fish.png";
-
 
 const sharkImage = new Image();
 sharkImage.src = "shark.png";
 
 
+let mouseX = 0;
+let mouseY = 0;
+
+canvas.addEventListener("mousemove", function(event) {
+    const rect = canvas.getBoundingClientRect();
+
+    // convert to model space (0..100), flipping Y since the model's Y
+    // increases upward but canvas/mouse Y increases downward
+    mouseX = ((event.clientX - rect.left) / rect.width) * 100;
+    mouseY = 100 - ((event.clientY - rect.top) / rect.height) * 100;
+});
+
+
 // ==========================================
-// SIMULATION DATA
+// LIVE STATE FROM THE SERVER
 // ==========================================
 
-let simulation = [];
+// currentFrame is what gets drawn every render tick. It's updated
+// whenever a fetch to the server resolves, independent of the render
+// loop's own timing, so a slow network response never blocks drawing.
 
-let currentFrame = 0;
+let currentFrame = { fish: [], sharks: [] };
 
 
-// ==========================================
-// LOAD JSON
-// ==========================================
+function toFrame(fish_positions, fish_velocities, shark_positions, shark_velocities) {
 
-async function loadSimulation() {
+    const fish = fish_positions.map((pos, i) => {
+        const vel = fish_velocities[i];
 
-    const response = await fetch("simulation.json");
+        return {
+            x: pos[0],
+            y: pos[1],
+            angle: Math.atan2(vel[1], vel[0])
+        };
+    });
 
-    simulation = await response.json();
+    const sharks = shark_positions.map((pos, i) => {
+        const vel = shark_velocities[i];
 
-    console.log("Simulation loaded");
-    console.log("Frames:", simulation.length);
+        return {
+            x: pos[0],
+            y: pos[1],
+            angle: Math.atan2(vel[1], vel[0])
+        };
+    });
 
-    requestAnimationFrame(animate);
+    return { fish, sharks };
 
 }
 
 
-// ==========================================
-// DRAW BACKGROUND
-// ==========================================
+async function updateShark() {
+
+    const response = await fetch("http://127.0.0.1:5000/abm_fish_server", {
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+            mouseX: mouseX,
+            mouseY: mouseY
+        })
+    });
+
+    const data = await response.json();
+
+    currentFrame = toFrame(
+        data.fish_positions,
+        data.fish_velocities,
+        data.shark_positions,
+        data.shark_velocities
+    );
+
+}
+
 
 function drawBackground() {
 
@@ -74,11 +116,6 @@ function drawBackground() {
 
 }
 
-
-// ==========================================
-// CONVERT SIMULATION POSITION
-// TO CANVAS POSITION
-// ==========================================
 
 function scaleX(x) {
 
@@ -96,11 +133,6 @@ function scaleY(y) {
     );
 
 }
-
-
-// ==========================================
-// DRAW FISH
-// ==========================================
 
 function drawFish(fish) {
 
@@ -142,10 +174,6 @@ function drawFish(fish) {
 }
 
 
-// ==========================================
-// DRAW SHARK
-// ==========================================
-
 function drawShark(shark) {
 
     const x = scaleX(shark.x);
@@ -186,10 +214,6 @@ function drawShark(shark) {
 }
 
 
-// ==========================================
-// DRAW ONE FRAME
-// ==========================================
-
 function drawFrame(frame) {
 
     drawBackground();
@@ -220,49 +244,12 @@ function drawFrame(frame) {
 
 
 // ==========================================
-// ANIMATION LOOP
+// RENDER LOOP  (draws whatever the latest fetched frame is)
 // ==========================================
-
-let lastTime = 0;
-
-const frameDuration = 30;
-
-
-// 30 milliseconds = ~33 simulation frames/sec
-
 
 function animate(timestamp) {
 
-    if (simulation.length === 0) {
-
-        return;
-
-    }
-
-
-    if (timestamp - lastTime >= frameDuration) {
-
-        drawFrame(
-            simulation[currentFrame]
-        );
-
-
-        currentFrame += 1;
-
-
-        // Loop back to beginning
-
-        if (currentFrame >= simulation.length) {
-
-            currentFrame = 0;
-
-        }
-
-
-        lastTime = timestamp;
-
-    }
-
+    drawFrame(currentFrame);
 
     requestAnimationFrame(animate);
 
@@ -270,7 +257,31 @@ function animate(timestamp) {
 
 
 // ==========================================
-// START
+// FETCH LOOP  (polls the server on its own cadence)
 // ==========================================
 
-loadSimulation();
+const fetchInterval = 30; // ms between requests to the server
+
+async function fetchLoop() {
+
+    while (true) {
+
+        try {
+
+            await updateShark();
+
+        } catch (error) {
+
+            console.error("Failed to fetch simulation update:", error);
+
+        }
+
+        await new Promise(resolve => setTimeout(resolve, fetchInterval));
+
+    }
+
+}
+
+
+requestAnimationFrame(animate);
+fetchLoop();
